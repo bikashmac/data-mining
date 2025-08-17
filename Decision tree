@@ -1,0 +1,43 @@
+# Load required libraries
+library(tidyverse)
+library(rpart)
+library(rpart.plot)
+library(caret)
+
+# Read the dataset
+vgsales <- read.csv("C:/Users/ASUS/Documents/vgsales.csv/vgsales.csv")
+
+# Remove rows with missing values (especially Year, Publisher, etc.)
+vgsales_clean <- na.omit(vgsales)
+
+# Create a binary target variable: Top_Seller
+vgsales_clean$Top_Seller <- ifelse(vgsales_clean$Global_Sales >= 1.0, 1, 0)
+vgsales_clean$Top_Seller <- as.factor(vgsales_clean$Top_Seller)
+
+# Optional: Drop Global_Sales since it's used to create the target
+vgsales_clean <- vgsales_clean %>% select(-Global_Sales)
+
+# Encode categorical variables as factors
+vgsales_clean$Platform <- as.factor(vgsales_clean$Platform)
+vgsales_clean$Genre <- as.factor(vgsales_clean$Genre)
+vgsales_clean$Publisher <- as.factor(vgsales_clean$Publisher)
+
+# Create train/test split
+set.seed(123)
+train_index <- createDataPartition(vgsales_clean$Top_Seller, p = 0.8, list = FALSE)
+train_data <- vgsales_clean[train_index, ]
+test_data <- vgsales_clean[-train_index, ]
+
+# Train a decision tree classifier
+model <- rpart(Top_Seller ~ NA_Sales + EU_Sales + JP_Sales + Platform + Genre,
+               data = train_data, method = "class")
+
+# Plot the tree
+rpart.plot(model, type = 3, extra = 104, fallen.leaves = TRUE)
+
+# Predict on test data
+predictions <- predict(model, test_data, type = "class")
+
+# Evaluate the model
+conf_matrix <- confusionMatrix(predictions, test_data$Top_Seller)
+print(conf_matrix)
