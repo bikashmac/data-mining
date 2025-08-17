@@ -1,0 +1,87 @@
+# Load required libraries
+library(tidyverse)
+library(dbscan)
+library(factoextra)
+library(cluster)
+library(clusterSim)   # for Davies-Bouldin index
+library(fpc)          # for Calinski-Harabasz index
+library(dplyr)
+
+# Load the dataset
+vgsales <- read.csv("vgsales.csv", stringsAsFactors = TRUE)
+
+# Select numeric sales columns and remove missing values
+vgsales_numeric <- vgsales %>%
+  dplyr::select(NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales) %>%
+  na.omit()
+
+# Scale the data
+scaled_data <- scale(vgsales_numeric)
+
+# Use kNN distance plot to find optimal epsilon
+kNNdistplot(scaled_data, k = 1)
+abline(h = 0.3, col = "red", lty = 2)  # adjust threshold after checking plot
+
+# Apply DBSCAN (adjust eps and minPts if needed)
+db <- dbscan(scaled_data, eps = 1, MinPts = 5)
+
+# Add cluster info to dataset
+vgsales_clustered <- vgsales_numeric
+vgsales_clustered$Cluster <- factor(db$cluster)
+
+# Visualize DBSCAN clusters
+fviz_cluster(list(data = scaled_data, cluster = db$cluster),
+             geom = "point", ellipse = FALSE, 
+             show.clust.cent = FALSE,
+             palette = "jco", ggtheme = theme_minimal()) +
+  labs(title = "DBSCAN Clustering of Games by Sales")
+
+
+# 3D plot using first three features
+plot_ly(
+  data = vgsales_clustered,
+  x = ~NA_Sales,
+  y = ~EU_Sales,
+  z = ~JP_Sales,
+  color = ~Cluster,
+  colors = "Set1",
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 4)
+) %>%
+  layout(
+    title = "3D Visualization of DBSCAN Clustering",
+    scene = list(
+      xaxis = list(title = "NA Sales"),
+      yaxis = list(title = "EU Sales"),
+      zaxis = list(title = "JP Sales")
+    )
+  )
+
+
+
+# Silhouette Score 
+if (length(unique(db$cluster)) > 1) {
+  sil_score <- silhouette(db$cluster, dist(scaled_data))
+  avg_sil_score <- mean(sil_score[, 3])
+  cat("Silhouette Score (DBSCAN):", avg_sil_score, "\n")
+} else {
+  cat("Silhouette Score: Not applicable (only one cluster found)\n")
+}
+
+# Davies–Bouldin Index 
+if (length(unique(db$cluster)) > 1) {
+  dbi <- index.DB(scaled_data, db$cluster)$DB
+  cat("Davies–Bouldin Index (DBSCAN):", dbi, "\n")
+}
+
+# Calinski–Harabasz Index 
+if (length(unique(db$cluster)) > 1) {
+  chi <- calinhara(scaled_data, db$cluster)
+  cat("Calinski–Harabasz Index (DBSCAN):", chi, "\n")
+}
+
+# Review cluster assignments
+table(vgsales_clustered$Cluster)
+
+
