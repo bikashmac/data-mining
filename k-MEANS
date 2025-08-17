@@ -1,0 +1,75 @@
+# Load required libraries
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(clusterSim)   # For Davies–Bouldin Index
+library(fpc)          # For Calinski–Harabasz Index
+library(plotly)
+
+# Load the dataset
+vgsales <- read.csv("vgsales.csv", stringsAsFactors = TRUE)
+
+# Select numeric sales columns and remove NA
+sales_data <- vgsales %>%
+  dplyr::select(NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales) %>%
+  na.omit()
+
+# Scale the numeric data
+scaled_data <- scale(sales_data)
+
+# Determine optimal number of clusters (Elbow method)
+fviz_nbclust(scaled_data, kmeans, method = "wss") +
+  labs(title = "Elbow Method for Optimal K")
+
+# Apply K-Means Clustering (choose k = 3 as example)
+set.seed(123)
+kmeans_result <- kmeans(scaled_data, centers = 3, nstart = 25)
+print(kmeans_result)
+
+# Add cluster labels to original data
+vgsales$Cluster <- factor(kmeans_result$cluster[match(1:nrow(vgsales), 
+                                                      as.numeric(rownames(sales_data)))])
+
+# Visualize Clusters
+fviz_cluster(kmeans_result, data = scaled_data,
+             geom = "point", ellipse.type = "convex", 
+             palette = "jco", ggtheme = theme_minimal()) +
+  labs(title = "K-Means Clustering of Games by Sales")
+
+# Cluster Summary
+table(kmeans_result$cluster)
+aggregate(sales_data, by = list(Cluster = kmeans_result$cluster), mean)
+
+# 3D Scatter Plot of Clusters
+plot_ly(
+  x = ~sales_data$NA_Sales, 
+  y = ~sales_data$EU_Sales, 
+  z = ~sales_data$JP_Sales,
+  color = ~factor(kmeans_result$cluster),
+  colors = c("#FF5733", "#33FF57", "#3357FF"),
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 4, opacity = 0.8)
+) %>%
+  layout(
+    title = "3D Cluster Visualization of Game Sales",
+    scene = list(
+      xaxis = list(title = "NA Sales (Millions)"),
+      yaxis = list(title = "EU Sales (Millions)"),
+      zaxis = list(title = "JP Sales (Millions)")
+    )
+  )
+
+
+# Silhouette Score 
+sil_score <- silhouette(kmeans_result$cluster, dist(scaled_data))
+avg_sil <- mean(sil_score[, 3])
+cat("Silhouette Score (K-Means):", avg_sil, "\n")
+
+# Davies–Bouldin Index 
+dbi <- index.DB(scaled_data, kmeans_result$cluster)$DB
+cat("Davies–Bouldin Index (K-Means):", dbi, "\n")
+
+# Calinski–Harabasz Index 
+chi <- calinhara(scaled_data, kmeans_result$cluster)
+cat("Calinski–Harabasz Index (K-Means):", chi, "\n")
