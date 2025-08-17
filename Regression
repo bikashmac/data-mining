@@ -1,0 +1,48 @@
+# Load required libraries
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(corrplot)
+library(readr)
+
+# Load the dataset
+df <- read_csv("vgsales.csv")
+
+# Clean dataset
+df_cleaned <- df %>%
+  filter(!is.na(Year), !is.na(Publisher))
+
+# Select numeric sales columns
+sales_data <- df_cleaned %>%
+  select(NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales)
+
+# ------------------------------
+# 1. Correlation Heatmap (saved)
+# ------------------------------
+cor_matrix <- cor(sales_data, use = "complete.obs")
+
+# Save correlation heatmap
+png("correlation_heatmap.png", width = 800, height = 600)
+corrplot(cor_matrix, method = "color", addCoef.col = "black",
+         tl.cex = 0.8, number.cex = 0.8,
+         main = "Correlation Matrix of Regional and Global Sales")
+dev.off()
+
+# ------------------------------
+# 2. Pairplot (saved)
+# ------------------------------
+# Save pairplot image
+png("pairplot_sales.png", width = 1000, height = 800)
+GGally::ggpairs(sales_data)
+dev.off()
+
+# ------------------------------
+# 3. Average Sales by Genre Table (print to console)
+# ------------------------------
+avg_sales_by_genre <- df_cleaned %>%
+  group_by(Genre) %>%
+  summarise(across(c(NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales),
+                   ~ round(mean(.x, na.rm = TRUE), 2))) %>%
+  arrange(desc(Global_Sales))
+
+print(avg_sales_by_genre)
