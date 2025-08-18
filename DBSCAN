@@ -1,14 +1,115 @@
 # Load required libraries
 library(tidyverse)
-library(dbscan)
-library(factoextra)
 library(cluster)
-library(clusterSim)   # for Davies-Bouldin index
-library(fpc)          # for Calinski-Harabasz index
+library(factoextra)
+library(clusterSim)   # For Davies–Bouldin Index
+library(fpc)          # For Calinski–Harabasz Index
+library(plotly)
+
+library(dbscan)
 library(dplyr)
 
 # Load the dataset
 vgsales <- read.csv("vgsales.csv", stringsAsFactors = TRUE)
+
+
+#  Check missing values
+cat("Missing values in each column:\n")
+print(colSums(is.na(vgsales)))
+
+#  Summary statistics to detect anomalies
+cat("\nSummary statistics:\n")
+print(summary(vgsales))
+
+#  Detect outliers using boxplots (numeric columns only)
+numeric_cols <- vgsales %>% dplyr::select(where(is.numeric))
+
+# Boxplot for all numeric columns
+par(mfrow = c(2, 3))  # Arrange plots
+for (col in names(numeric_cols)) {
+  boxplot(numeric_cols[[col]], main = col, col = "lightblue", outline = TRUE)
+}
+
+#  Identify outlier values for each numeric column
+cat("\nOutlier values:\n")
+for (col in names(numeric_cols)) {
+  Q1 <- quantile(numeric_cols[[col]], 0.25, na.rm = TRUE)
+  Q3 <- quantile(numeric_cols[[col]], 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  outliers <- numeric_cols[[col]][numeric_cols[[col]] < lower_bound | numeric_cols[[col]] > upper_bound]
+  cat(col, ":", length(outliers), "outliers detected\n")
+}
+
+#K-MEANS
+# Select numeric sales columns and remove NA
+sales_data <- numeric_cols %>%
+  dplyr::select(NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales) %>%
+  na.omit()
+
+# Scale the numeric data
+scaled_data <- scale(sales_data)
+
+# Determine optimal number of clusters (Elbow method)
+fviz_nbclust(scaled_data, kmeans, method = "wss") +
+  labs(title = "Elbow Method for Optimal K")
+
+# Apply K-Means Clustering (choosing k = 3 )
+set.seed(123)
+kmeans_result <- kmeans(scaled_data, centers = 3, nstart = 25)
+print(kmeans_result)
+
+# Add cluster labels to original data
+vgsales$Cluster <- factor(kmeans_result$cluster[match(1:nrow(vgsales), 
+                                                      as.numeric(rownames(sales_data)))])
+
+# Visualize Clusters
+fviz_cluster(kmeans_result, data = scaled_data,
+             geom = "point", ellipse.type = "convex", 
+             palette = "jco", ggtheme = theme_minimal()) +
+  labs(title = "K-Means Clustering of Games by Sales")
+
+# Cluster Summary
+table(kmeans_result$cluster)
+aggregate(sales_data, by = list(Cluster = kmeans_result$cluster), mean)
+
+# 3D Scatter Plot of Clusters
+plot_ly(
+  x = scaled_data[,1],
+  y = scaled_data[,2],
+  z = scaled_data[,3],
+  color = factor(kmeans_result$cluster),
+  colors = c("red", "green", "blue"),
+  type = "scatter3d",
+  mode = "markers"
+) %>%
+  layout(
+    title = "3D Cluster Visualization of Game Sales",
+    scene = list(
+      xaxis = list(title = "NA Sales (Millions)"),
+      yaxis = list(title = "EU Sales (Millions)"),
+      zaxis = list(title = "JP Sales (Millions)")
+    )
+  )
+
+
+
+
+# Silhouette Score 
+sil_score <- silhouette(kmeans_result$cluster, dist(scaled_data))
+avg_sil <- mean(sil_score[, 3])
+cat("Silhouette Score (K-Means):", avg_sil, "\n")
+
+# Davies–Bouldin Index 
+dbi <- index.DB(scaled_data, kmeans_result$cluster)$DB
+cat("Davies–Bouldin Index (K-Means):", dbi, "\n")
+
+# Calinski–Harabasz Index 
+chi <- calinhara(scaled_data, kmeans_result$cluster)
+cat("Calinski–Harabasz Index (K-Means):", chi, "\n")
+
+
 
 # Select numeric sales columns and remove missing values
 vgsales_numeric <- vgsales %>%
@@ -83,5 +184,4 @@ if (length(unique(db$cluster)) > 1) {
 
 # Review cluster assignments
 table(vgsales_clustered$Cluster)
-
 
